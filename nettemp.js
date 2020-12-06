@@ -332,7 +332,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
                         this.weights[t] *= -1
                     }
                     if (Math.random() < mutationrate) {
-                        // this.weights[t] *= 0
+                        this.weights[t] *= 0
                     }
                     if (Math.random() < mutationrate) {
                         this.weights[t] = this.weight()
@@ -464,6 +464,31 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 }
             }
         }
+
+    class LineOP {
+        constructor(object, target, color, width) {
+            this.object = object
+            this.target = target
+            this.color = color
+            this.width = width
+        }
+        hypotenuse() {
+            let xdif = this.object.x - this.target.x
+            let ydif = this.object.y - this.target.y
+            let hypotenuse = (xdif * xdif) + (ydif * ydif)
+            return Math.sqrt(hypotenuse)
+        }
+        draw() {
+            let linewidthstorage = canvas_context.lineWidth
+            canvas_context.strokeStyle = this.color
+            canvas_context.lineWidth = this.width
+            canvas_context.beginPath()
+            canvas_context.moveTo(this.object.x, this.object.y)
+            canvas_context.lineTo(this.target.x, this.target.y)
+            canvas_context.stroke()
+            canvas_context.lineWidth = linewidthstorage
+        }
+    }
         class GenNN {
             constructor(inputs, layercount, layersetupArray, outputs = 2, override = 0) {
                 if (override == 0) {
@@ -482,13 +507,13 @@ window.addEventListener('DOMContentLoaded', (event) => {
                     this.lr = .5
                     this.iterations = 1
                     // this.optimizer = "momentum"
-                    this.dot = new Circle(350, 350, 7, "orange")
                     this.optimizerParams = {}
                     this.optimizerParams.alpha = .005
                     this.optimizerParams.beta1 = .05
                     this.optimizerParams.beta2 = .15
                     this.gradients = []
                     this.adjustments = []
+                    this.fed = 0
                     for (let t = 0; t < this.layercount; t++) {
                         let nodes = []
                         for (let k = 0; k < this.layersetupArray[t]; k++) {
@@ -551,12 +576,13 @@ window.addEventListener('DOMContentLoaded', (event) => {
                     this.g = 128 //Math.random()*255
                     this.b = 128 //Math.random()*255
                     this.name = `rgb(${this.r},${this.g},${this.b})`
+                    this.dot = new Circle(350, 350, 2.7, `rgb(${this.r},${this.g},${this.b})`)
                 } else {
                     console.log(override)
                     // this = override
                 }
             }
-            clone() {
+            clone(x,y) {
                 let clone = new GenNN(this.inputs, this.layercount, this.layersetupArray, 4)
                 for (let t = 0; t < this.structure.length; t++) {
                     for (let k = 0; k < this.structure[t].length; k++) {
@@ -572,6 +598,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 clone.b = this.b
                 clone.parent = this.name
                 clone.name = `rgb(${clone.r},${clone.g},${clone.b})`
+                clone.dot.x = x
+                clone.dot.y = y
                 return clone
             }
             optimizeGradient(value, grad, momentum, gradients) {
@@ -627,9 +655,9 @@ window.addEventListener('DOMContentLoaded', (event) => {
                 return [...this.structure[target]]
             }
             mutate() {
-                this.r = Math.round(Math.max(Math.min((this.r + ((Math.random() - .5) * 36)), 255), 0))
-                this.g = Math.round(Math.max(Math.min((this.g + ((Math.random() - .5) * 36)), 255), 0))
-                this.b = Math.round(Math.max(Math.min((this.b + ((Math.random() - .5) * 36)), 255), 0))
+                this.r = Math.round(Math.max(Math.min((this.r + ((Math.random() - .5) * 16)), 255), 0))
+                this.g = Math.round(Math.max(Math.min((this.g + ((Math.random() - .5) * 16)), 255), 0))
+                this.b = Math.round(Math.max(Math.min((this.b + ((Math.random() - .5) * 16)), 255), 0))
                 this.name = `rgb(${this.r},${this.g},${this.b})`
                 for (let t = 0; t < this.structure.length; t++) {
                     for (let k = 0; k < this.structure[t].length; k++) {
@@ -637,6 +665,7 @@ window.addEventListener('DOMContentLoaded', (event) => {
                     }
                 }
                 this.changeInputs(this.inputs)
+                this.dot.color = `rgb(${this.r},${this.g},${this.b})`
             }
             smallmutate() {
                 this.r = Math.round(Math.max(Math.min((this.r + ((Math.random() - .5) * 10)), 255), 0))
@@ -746,18 +775,113 @@ window.addEventListener('DOMContentLoaded', (event) => {
 
 
                 if(this.outputMagnitudes[0] == Math.max(...this.outputMagnitudes)){
-                    this.seekfood
-
+                    this.seekfood()
                 }else  if(this.outputMagnitudes[1] == Math.max(...this.outputMagnitudes)){
-
-
+                    this.avoid()
                 }else  if(this.outputMagnitudes[2] == Math.max(...this.outputMagnitudes)){
-
-
+                    // this.follow()   
+                    this.seekfood()
                 }
 
                 // this.dot.move()
                 this.dot.draw()
+            }
+            follow(){
+                let maxlength = 10000
+                let point = new Circle(0,0,0,"red")
+                for(let t = 0;t<meshes.length;t++){
+                    if(meshes[t]!= this){
+                        let link = new LineOP(this.dot, meshes[t].dot)
+                        if(link.hypotenuse() < maxlength){
+                            maxlength = link.hypotenuse()
+                            point.x = meshes[t].dot.x
+                            point.y = meshes[t].dot.y
+    
+                        }
+                    }
+                }
+
+                let xdir = (point.x-this.dot.x)/100
+                let ydir = (point.y-this.dot.y)/100
+
+                for(let t = 0;(Math.abs(xdir)+Math.abs(ydir)) > 2; t++){
+                    xdir *= .99
+                    ydir *= .99
+                    if(t > 1000){
+                        break
+                    }
+                }
+                for(let t = 0;(Math.abs(xdir)+Math.abs(ydir)) < 2; t++){
+                    xdir *= 1.01
+                    ydir *= 1.01
+                    if(t > 1000){
+                        break
+                    }
+                }
+
+                this.dot.x += xdir
+                this.dot.y += ydir
+
+            }
+            avoid(){
+
+
+                let xdir = (deathzone.x-this.dot.x)/100
+                let ydir =(deathzone.y-this.dot.y)/100
+
+
+
+                for(let t = 0;(Math.abs(xdir)+Math.abs(ydir)) > 2; t++){
+                    xdir *= .99
+                    ydir *= .99
+                    if(t > 1000){
+                        break
+                    }
+                }
+                for(let t = 0;(Math.abs(xdir)+Math.abs(ydir)) < 2; t++){
+                    xdir *= 1.01
+                    ydir *= 1.01
+                    if(t > 1000){
+                        break
+                    }
+                }
+
+                this.dot.x -= xdir
+                this.dot.y -= ydir
+            }
+            seekfood(){
+                let maxlength = 10000
+                let point = new Circle(0,0,0,"red")
+                for(let t = 0;t<foods.length;t++){
+                    let link = new LineOP(this.dot, foods[t])
+                    if(link.hypotenuse() < maxlength){
+                        maxlength = link.hypotenuse()
+                        point.x = foods[t].x
+                        point.y = foods[t].y
+
+                    }
+                }
+
+                let xdir = (point.x-this.dot.x)/100
+                let ydir = (point.y-this.dot.y)/100
+
+                for(let t = 0;(Math.abs(xdir)+Math.abs(ydir)) > 2; t++){
+                    xdir *= .99
+                    ydir *= .99
+                    if(t > 1000){
+                        break
+                    }
+                }
+                for(let t = 0;(Math.abs(xdir)+Math.abs(ydir)) < 2; t++){
+                    xdir *= 1.01
+                    ydir *= 1.01
+                    if(t > 1000){
+                        break
+                    }
+                }
+
+                this.dot.x += xdir
+                this.dot.y += ydir
             }
             lognormalize(output) {
                 return (1 / (1 + Math.pow(Math.E, (output * -1))))
@@ -824,21 +948,24 @@ window.addEventListener('DOMContentLoaded', (event) => {
         let mutationratemicro = .00019
         let boing = 0
 
-        let deathzone = new Circle(100, 100, 40, "#FF00AA44", Math.random()-.5, Math.random()-.5, 1, 1)
+        let deathzone = new Circle(100, 100, 80, "#FF00AA44", 3*Math.random()-.5, 3*Math.random()-.5, 1, 1)
 
-        inputArray = [deathzone.x, deathzone.y, deathzone.xmom, deathzone.ymom, 350, 350]
+        inputArray = [0,0]// [deathzone.x, deathzone.y, 0, 0] //deathzone.xmom, deathzone.ymom,
         let foods = []
 
-        for (let t = 0; t < 200; t++) {
-            let food = new Circle(Math.random() * 700, Math.random() * 700, 5, "cyan")
+        for (let t = 0; t < 500; t++) {
+            let food = new Circle(Math.random() * 700, Math.random() * 700, .5, "cyan")
             // inputArray.push(food.x)
             // inputArray.push(food.y)
             foods.push(food)
         }
 
-        let gobot = new GenNN(inputArray, 5, [36, 24, 18, 12, 4], 0)
+        let gobot = new GenNN(inputArray, 3, [9, 6, 3], 0)
 
         meshes.push(gobot)
+        let gobot2 = new GenNN(inputArray, 3, [9, 6, 3], 0)
+
+        meshes.push(gobot2)
         function main() {
             canvas_context.clearRect(0, 0, 700, 700)
             if (keysPressed['y']) {
@@ -858,9 +985,13 @@ window.addEventListener('DOMContentLoaded', (event) => {
                     if (meshes[k].dot.doesPerimeterTouch(foods[t])) {
                         foods[t].x = Math.random() * 700
                         foods[t].y = Math.random() * 700
-                        let newmesh = meshes[k].clone()
-                        newmesh.mutate()
-                        meshes.push(newmesh)
+                        meshes[k].fed+=5
+                        if(meshes[k].fed > 5){
+                            let newmesh = meshes[k].clone(meshes[k].dot.x, meshes[k].dot.y)
+                            newmesh.mutate()
+                            meshes.push(newmesh)    
+                            meshes[k].fed = 0
+                        }
                     }
                 }
                 // inputArray.push(foods[t].x)
@@ -869,7 +1000,25 @@ window.addEventListener('DOMContentLoaded', (event) => {
             }
 
             for (let k = 0; k < meshes.length; k++) {
-                inputArray = [deathzone.x, deathzone.y, deathzone.xmom, deathzone.ymom, meshes[k].dot.x,meshes[k].dot.y]
+
+
+                let maxlength = 10000
+                let point = new Circle(0,0,0,"red")
+                for(let t = 0;t<foods.length;t++){
+                    let link = new LineOP(meshes[k].dot, foods[t])
+                    if(link.hypotenuse() < maxlength){
+                        maxlength = link.hypotenuse()
+                        point.x = foods[t].x
+                        point.y = foods[t].y
+
+                    }
+                }
+
+                let link1 = new LineOP(meshes[k].dot, point)
+                let link2 = new LineOP(meshes[k].dot, deathzone)
+
+                // inputArray = [Math.abs(deathzone.x-meshes[k].dot.x), Math.abs(deathzone.y-meshes[k].dot.y), Math.abs(point.x-meshes[k].dot.x), Math.abs(point.y-meshes[k].dot.y)] //meshes[k].dot.x,meshes[k].dot.y,  //deathzone.xmom, deathzone.ymom, 
+                inputArray = [link1.hypotenuse(), link2.hypotenuse()]  // [Math.abs(deathzone.x-meshes[k].dot.x), Math.abs(deathzone.y-meshes[k].dot.y), Math.abs(point.x-meshes[k].dot.x), Math.abs(point.y-meshes[k].dot.y)] //meshes[k].dot.x,meshes[k].dot.y,  //deathzone.xmom, deathzone.ymom, 
                 meshes[k].changeInputs(inputArray)
             }
 
@@ -896,6 +1045,15 @@ window.addEventListener('DOMContentLoaded', (event) => {
             //     backprop(meshes[p], outputexpected)
             //     meshes[p].changeInputs([.05, .1])
             // }
+            if(meshes.length == 0){
+
+        let gobot = new GenNN(inputArray, 3, [9, 6, 3], 0)
+
+        meshes.push(gobot)
+        let gobot2 = new GenNN(inputArray, 3, [9, 6, 3], 0)
+
+        meshes.push(gobot2)
+            }
         }
 
     }, 1);
